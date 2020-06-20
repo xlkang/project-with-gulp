@@ -44,8 +44,16 @@ const script = () => {
         .pipe(bs.reload({ stream: true }))
 }
 
+const lintAndCompileScript = series(lint, script);
+
 const data = {
-    menus: [],
+    menus: [{
+        name: '主页',
+        link: '/'
+    },{
+        name: '关于',
+        link: '/about.html'
+    }],
     title: 'gulp样板页面',
     pkg: require('./package.json'),
     dete: new Date()
@@ -53,7 +61,7 @@ const data = {
 // 编译模板
 const page = () => {
     return src('src/**/*.html', { base: 'src' })
-        .pipe(plugins.swig(data))
+        .pipe(plugins.swig({data}))
         .pipe(dest('temp'))
         .pipe(bs.reload({ stream: true }))
 }
@@ -79,10 +87,10 @@ const extra = () => {
 }
 
 // 开发服务器
-const serve = () => {
+const startDevServer = () => {
+    watch('src/assets/scripts/*.js', lintAndCompileScript);
     watch('src/assets/styles/*.scss', style);
-    watch('src/assets/scripts/*.js', script);
-    watch('src/assets/**/*.html', script);
+    watch('src/**/*.html', page);
     watch([
         'src/assets/images/**',
         'src/assets/fonts/**',
@@ -101,6 +109,7 @@ const serve = () => {
     })
 }
 
+// 合并文件
 const useref = () => {
     return src('temp/**/*.html', { base: 'temp' })
         .pipe(plugins.useref({ searchPath: ['temp', '.']}))
@@ -115,12 +124,9 @@ const useref = () => {
 }
 
 // 组合任务编译src
-const compileSrc = series(lint, parallel(style, script, page))
+const compileSrc = parallel(lintAndCompileScript, style, page)
 
-// 开发构建并启动服务
-const start = series(compileSrc, serve);
-
-// 完整构建
+// 生产构建
 const build = series(
     clean,
     parallel(
@@ -131,28 +137,37 @@ const build = series(
     )
 )
 
-// 自定上传服务器
-// gulp.task('deploy', gulp.series('execSSH', done => {
-//     console.log('2s后开始上传文件到服务器...')
-//     setTimeout(() => {
-//         gulp.src(`./${npm_package_name}/**`)
-//             .pipe(gulpSSH.dest(config.remotePath))
-//             console.log('上传完毕.....')
-//             done();
-//     }, 2000)
-// }))
+// 开发构建并启动服务
+const serve = series(compileSrc, startDevServer);
 
-// "clean": "gulp clean",
-// "lint": "gulp lint",
-// "serve": "gulp serve",
-// "build": "gulp build",
-// "start": "gulp start",
-// "deploy": "gulp deploy --production"
+// 启动生产模式服务
+const startProdServer = () => {
+    bs.init({
+        notify: false,
+        port: 3002,
+        server: {
+            // 服务器根目录
+            baseDir: ['dist'],
+            // 引用路径替换
+            routes: {
+                '/node_modules': 'node_modules'
+            }
+        }
+    })
+}
+
+// 生产模式启动项目
+const start = series(build, startProdServer);
+
+// "clean": "gulp clean",       -> 清除temp和dist目录文件
+// "lint": "gulp lint",         -> lint scipts
+// "serve": "gulp serve",       -> 开发模式启动app并启动一个自动更新的web服务
+// "build": "gulp build",       -> 生产模式构建项目并且输出到dist目录
+// "start": "gulp start",       -> 生产模式启动项目
 module.exports = {
     clean,
     lint,
     serve,
     build,
     start,
-    // deploy
 }
